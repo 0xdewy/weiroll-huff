@@ -1,0 +1,223 @@
+#define function execute(bytes32[],bytes[]) nonpayable returns ()
+
+#define constant ONE_BYTE = 0xFF
+#define constant STATE_OFFSET = 0xC4
+
+// 4 byte function signature
+#define constant FUNC_SIG_MASK = 0xFFFFFFFF00000000000000000000000000000000000000000000000000000000
+#define constant SIG_OFFSET = 0xE0  // 224 bits
+
+// 1 byte flag mask
+#define constant FUNC_FLAG_MASK = 0x00000000FF000000000000000000000000000000000000000000000000000000
+#define constant FLAG_OFFSET = 0xD8  // 216 bits
+
+// 6 byte input mask
+#define constant FUNC_INPUT_MASK = 0x0000000000FFFFFFFFFFFF000000000000000000000000000000000000000000
+#define constant INPUT_OFFSET = 0xA8  // 168 bits
+
+
+// mask to get the 1 byte output field between the input field and target address
+#define constant FUNC_OUT_MASK = 0x0000000000000000000000FF0000000000000000000000000000000000000000
+#define constant OUTPUT_OFFSET = 0x98  // 152 bits
+
+// mask to get the 20 byte target address field after the output field
+#define constant FUNC_ADDR_MASK = 0x000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+// Flag masks
+#define constant FLAG_RESERVED = 0x3F // 0b00111111
+#define constant FLAG_CALLTYPE = 0x01  // 0b00000001
+
+// Flag values
+#define constant FLAG_CT_DELEGATECALL = 0x00
+#define constant FLAG_CT_CALL = 0x01  // 0b00000001
+#define constant FLAG_CT_STATICCALL = 0x02  // 0b00000010
+#define constant FLAG_CT_VALUECALL = 0x03  // 0b00000011
+#define constant FLAG_CT_MASK = 0x03 // 0b00000011
+#define constant FLAG_EXTENDED_COMMAND = 0x40 // 0b01000000
+#define constant FLAG_TUPLE_RETURN = 0x80 // 0b10000000
+
+
+// Input masks
+#define constant INPUT_VARIABLE_LENGTH = 0x80 // 0b10000000
+#define constant INPUT_VALUE_MASK = 0x7F // 0b01111111
+
+// Input values
+#define constant END_OF_ARGS = 0xFF // 0b11111111
+#define constant USE_STATE = 0xFE // 0b11111110
+
+// macro thats subs 8 from the top of the stack
+#define macro SUB_8() = takes (0) returns (0) {
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8 add
+}
+
+#define macro BUILD_INPUTS() = takes (3) returns (1) {
+    // Inputs: [inputs, command]         Output: [calldata]
+    calldatasize calldatasize pop pop
+
+    // TODO: get free memory pointer
+    0x04 calldatasize sub // [memStart + selector, inputs, command]]
+
+    // Store 4 byte selector in memory at beginning of call
+    // dup3 [FUNC_SIG_MASK] and [SIG_OFFSET] shr  // [selector, memStart, inputs, command]
+    dup3 [FUNC_SIG_MASK] and             // [selector, memStart, inputs, command]
+    dup2 mstore     // [memStart, inputs, command]
+    dup1 0x04 add       // [memEnd, memStart, inputs, command]
+    
+    // Bitshift inputs to get first input
+    dup3 0x28 shr     // [input, memEnd, memStart, inputs, command]
+
+    // Push index onto stack
+    0x28              // [index, input, memEnd, memStart, inputs, command]
+    swap2 swap1       // [input, memEnd, index, memStart, inputs, command]
+
+    encode_loop: // [input, memEnd ..] 
+      // check if finished
+      dup1 [END_OF_ARGS] eq pre_encode_call jumpi
+      // check if input variable is fixed length (uint, bytes32, address, bool)
+      dup1 [INPUT_VARIABLE_LENGTH] and iszero fixed_length jumpi // [input, memEnd...]
+      // TODO: variable length input unimplemented
+      0x00 0x00 revert
+
+    fixed_length:  // [input, memEnd, index, memStart, inputs, command]
+      // get index into state where variable is stored
+      [INPUT_VALUE_MASK] and  // [stateIndex, memEnd, memStart, inputs, command]
+
+      // get state offset. 32 bytes per stateIndex, starting at 0x20
+
+      0x01 add 0x20 mul  // [stateOffset, memEnd, memStart, inputs, command]
+
+      mload              // [stateMemLocation, memEnd, memStart, inputs, command]
+      // add 32 bytes to account for length of state array and 32 bytes to skip length
+      0x40 add
+
+      // Load state value and store it in location for the call
+      mload  // [stateValue, memEnd, index, memStart, inputs, command]
+      dup2 mstore  // [memEnd, index, memStart, inputs, command]
+      0x20 add    // [memEnd, index, memStart, inputs, command]
+      swap1       // [index, memEnd, memStart, inputs, command]
+      
+      // Check if loop finished
+      dup1 iszero encode_call jumpi
+      SUB_8()
+      swap1        // [memEnd, index+1, memStart, inputs, command]
+
+      // Get next input
+      dup4 dup3 shr // [input, memEnd, index+1, memStart, inputs, command]
+      [ONE_BYTE] and // [input, memEnd, index+1, memStart, inputs, command]
+
+      encode_loop jump
+
+    pre_encode_call:  // [input, memEnd, index, memStart, inputs, command]
+      pop
+      swap1
+
+    encode_call:      // [index, memEnd, memStart, inputs, command]
+    pop   // [memEnd, memStart, inputs, command]
+
+    // Get length of data
+    dup2 swap1 sub // [memSize, memStart, inputs, command]
+    // TODO: deal with outputs
+    0x00 swap1  // [memSize, 0, memStart, inputs, command]
+    0x00 swap3  // [memStart, memSize, 0, 0, inputs, command]
+
+    // Set value 
+    // TODO: check value is 0 if not value call
+    0x00   // [value, memStart, memSize, 0, 0, inputs, command]
+
+    // Set target
+    dup7 [FUNC_ADDR_MASK] and // [target, value, memStart, memSize, 0, 0, inputs, command]
+
+    // Set gas
+    gas                       // [gas, target, value, argOffset, argSize, retOffset, retSize]
+}
+
+// Calldata layout:
+// bytes32[] calldata commands, bytes[] memory state)
+// Memory
+// 0x00 = free memory pointer
+// 0x20 = state start
+// 0x.. = state end / free memory
+// Calldata:
+// 0x00: 0x40
+// 0x20: 0x1a0  (state entry calldata location)
+// 0x40: 0xCommandLength
+// 0x60..0x1a0: 0xCommands
+// 0x1a0: 0xStateLength
+// 0x1c0: 0x40
+// 0x1e0: 0x80
+// 0x200: 0x20
+// 0x220: 0xstate[0]
+// 0x240: 0x20
+// 0x260: 0xstate[1]
+#define macro EXECUTE() = takes (0) returns (0) {
+    
+    // Get state from calldata
+    0x24 calldataload           // [stateCalldataPointer]
+    0x04 add dup1               // [stateCalldataPointer, stateCalldataPointer]
+
+    // Load state length and multiply by 0x60. (each state entry takes up 96 bytes [location[0], stateLength[0], state[0]])
+    calldataload  0x60 mul    // [stateLengthBytes, stateCalldataPointer]
+
+    // Add 32 bytes more as the state length is stored at the beginning
+    0x20 add       // [stateLengthBytes, stateCalldataPointer]
+    swap1 0x00 calldatacopy
+
+    // Get the number of commands provided
+    0x44 calldataload   // [numCommands]
+    dup1 iszero finish_execution jumpi
+
+    // Push first and last index locations of command calldata onto stack
+    0x20 mul  // [lastCommandOffset]
+    0x64 add      // [lastCommandLocation]
+    0x64          // [firstIndex, lastCommandLocation]
+
+    // // loop through commands and execute each one
+    execute_loop:      // input: [index, lastCommandLocation]
+      // load command
+      dup1 calldataload          // [command, index, lastCommandLocation]
+      // load flags
+      dup1 [FUNC_FLAG_MASK] and [FLAG_OFFSET] shr    // [flags, command, index, lastCommandLocation]
+      // load calltype from flag
+      [FLAG_CT_MASK] and  // [calltype, command, index, lastCommandLocation]
+      // TODO: MAKE SWITCH TABLE FOR CALLTYPES
+      dup1 [FLAG_CT_CALL] eq do_call jumpi // [isCall, calltype, command, index, lastCommandLocation]
+
+      finish_execution jump
+
+
+    // CALL
+    do_call:  // [calltype, command, index, numCommands]
+      pop     // [command, index, numCommands]
+      // load inputs
+      dup1 [FUNC_INPUT_MASK] and [INPUT_OFFSET] shr      // [inputs, command, index, numCommands]
+
+      BUILD_INPUTS()          // [gas, to, value, argOffset, argSize, retOffset, retSize]
+      call                    // [success, inputs, command, index, numCommands]
+      // TODO: handle call revert
+      iszero revert_execution jumpi
+
+      // increment command index and continue loop
+      pop pop     // [index, lastCommandLocation]     
+      0x20 add    // [index+1, lastCommandLocation]
+      dup2 dup2 lt execute_loop jumpi // [index+1 > lastCommandLocation, index+1, lastCommandLocation]
+
+
+    finish_execution:
+        0x00 0x00 return
+
+    revert_execution:
+        0x00 0x00 revert
+}
+
+#define macro MAIN() = takes (0) returns (0) {
+    // Identify which function is being called.
+    0x00 calldataload 0xE0 shr
+    // dup1 __FUNC_SIG(execute) eq execute jumpi
+    dup1 0xde792d5f eq execute jumpi
+
+    0x00 0x00 revert
+
+    execute:
+        EXECUTE()
+
+}
