@@ -1,22 +1,20 @@
-// SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.11;
 
 import "./CommandBuilder.sol";
 
+uint256 constant FLAG_CT_DELEGATECALL = 0x00;
+uint256 constant FLAG_CT_CALL = 0x01;
+uint256 constant FLAG_CT_STATICCALL = 0x02;
+uint256 constant FLAG_CT_VALUECALL = 0x03;
+uint256 constant FLAG_CT_MASK = 0x03;
+uint256 constant FLAG_EXTENDED_COMMAND = 0x80;
+uint256 constant FLAG_TUPLE_RETURN = 0x40;
+
+uint256 constant SHORT_COMMAND_FILL = 0x000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+
 
 contract Weiroll {
     using CommandBuilder for bytes[];
-
-    uint256 constant FLAG_CT_DELEGATECALL = 0x00;
-    uint256 constant FLAG_CT_CALL = 0x01;
-    uint256 constant FLAG_CT_STATICCALL = 0x02;
-    uint256 constant FLAG_CT_VALUECALL = 0x03;
-    uint256 constant FLAG_CT_MASK = 0x03;
-    uint256 constant FLAG_EXTENDED_COMMAND = 0x80;
-    uint256 constant FLAG_TUPLE_RETURN = 0x40;
-
-    uint256 constant SHORT_COMMAND_FILL = 0x000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
     address immutable self;
 
@@ -31,7 +29,7 @@ contract Weiroll {
     }
 
     function execute(bytes32[] calldata commands, bytes[] memory state)
-      public returns (bytes[] memory)
+      public payable returns (bytes[] memory)
     {
         bytes32 command;
         uint256 flags;
@@ -41,7 +39,7 @@ contract Weiroll {
         bytes memory outdata;
 
         uint256 commandsLength = commands.length;
-        for (uint256 i; i < commandsLength;) {
+        for (uint256 i; i < commandsLength; i=_uncheckedIncrement(i)) {
             command = commands[i];
             flags = uint256(uint8(bytes1(command << 32)));
 
@@ -79,20 +77,19 @@ contract Weiroll {
                     )
                 );
             } else if (flags & FLAG_CT_MASK == FLAG_CT_VALUECALL) {
-                uint256 calleth;
+                uint256 callEth;
                 bytes memory v = state[uint8(bytes1(indices))];
-                require(v.length == 32, "_execute: value call has no value indicated.");
                 assembly {
-                    calleth := mload(add(v, 0x20))
+                    callEth := mload(add(v, 0x20))
                 }
                 (success, outdata) = address(uint160(uint256(command))).call{ // target
-                    value: calleth
+                    value: callEth
                 }(
                     // inputs
                     state.buildInputs(
                         //selector
                         bytes4(command),
-                        bytes32(uint256(indices << 8) | CommandBuilder.IDX_END_OF_ARGS)
+                        bytes32(uint256(indices << 8) | IDX_END_OF_ARGS)
                     )
                 );
             } else {
@@ -117,8 +114,13 @@ contract Weiroll {
             } else {
                 state = state.writeOutputs(bytes1(command << 88), outdata);
             }
-            unchecked{++i;}
         }
         return state;
     }
+
+    function _uncheckedIncrement(uint256 i) private pure returns(uint256) {
+        unchecked {++i;}
+        return i;
+    }
 }
+

@@ -1,0 +1,5 @@
+WeirollTest:testHuffAddUints() (gas: 301279)
+WeirollTest:testHuffLogUint() (gas: 170152)
+WeirollTest:testHuffLoopLogUint() (gas: 2470015)
+WeirollTest:testHuffSendEther() (gas: 181066)
+WeirollTest:testRegularLogUint() (gas: 173637)
