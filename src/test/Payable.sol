@@ -2,8 +2,9 @@
 pragma solidity ^0.8.11;
 
 contract Payable {
-    event Paid(uint value);
-    function pay(uint value) external payable {
+    event Paid(uint256 value);
+
+    function pay(uint256 value) external payable {
         require(msg.value == value, "Payable: incorrect value");
         emit Paid(value);
     }

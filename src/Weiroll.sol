@@ -12,25 +12,18 @@ uint256 constant FLAG_TUPLE_RETURN = 0x40;
 
 uint256 constant SHORT_COMMAND_FILL = 0x000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
 
-
 contract Weiroll {
     using CommandBuilder for bytes[];
 
     address immutable self;
 
-    error ExecutionFailed(
-        uint256 command_index,
-        address target,
-        string message
-    );
+    error ExecutionFailed(uint256 command_index, address target, string message);
 
     constructor() {
         self = address(this);
     }
 
-    function execute(bytes32[] calldata commands, bytes[] memory state)
-      public payable returns (bytes[] memory)
-    {
+    function execute(bytes32[] calldata commands, bytes[] memory state) public payable returns (bytes[] memory) {
         bytes32 command;
         uint256 flags;
         bytes32 indices;
@@ -39,7 +32,7 @@ contract Weiroll {
         bytes memory outdata;
 
         uint256 commandsLength = commands.length;
-        for (uint256 i; i < commandsLength; i=_uncheckedIncrement(i)) {
+        for (uint256 i; i < commandsLength; i = _uncheckedIncrement(i)) {
             command = commands[i];
             flags = uint256(uint8(bytes1(command << 32)));
 
@@ -118,9 +111,10 @@ contract Weiroll {
         return state;
     }
 
-    function _uncheckedIncrement(uint256 i) private pure returns(uint256) {
-        unchecked {++i;}
+    function _uncheckedIncrement(uint256 i) private pure returns (uint256) {
+        unchecked {
+            ++i;
+        }
         return i;
     }
 }
-
