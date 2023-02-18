@@ -80,56 +80,48 @@
       mload                               // [stateValue]
       finish jump
 
-    // TODO: load more efficiently
-    // [numStateVars, [stateVar1Something, stateVar2Something, ...], stateVar1NumBytes, stateVar1]]
-    // numStateVars + 2 + index
-    read_calldata:  // [index]
-      // 0x40 mul
-      // [CALLDATA_STATE_POINTER] calldataload // [stateCalldataLocationWithOffset, index]
-      // 0x04 add                           // [stateCalldataLocation, index]
-      // dup1 calldataload                  // [numStateVarsInCalldata, stateCalldataLocation, index]
-      // 0x40 mul                          // [stateLengthOffset, stateCalldataLocation, index]
-      // add                             // [stateCalldataLocation + stateLengthOffset, index]
-      // add                            // [stateCalldataLocation + stateLengthOffset + index]
-      // calldataload
+    // TODO: find better way to access calldata state
+    read_calldata:  // Stack: [index]
       // Fetch state from calldata at index on stack
-      DEBUG()
-      [CALLDATA_STATE_POINTER] mload                // [stateCalldataLocation, index]
-      swap1 dup2                                    // [stateCalldataLocation, index, stateCalldataLocation]
-      calldataload                                 // [numStateVars, index, stateCalldataLocation]
-      add                                          // [index + numStateVars, stateCalldataLocation]
-      0x02 add                                   // [index + numStateVars + 2, stateCalldataLocation]
-      0x20 mul                                    // [(index + numStateVars + 2) * 32, stateCalldataLocation]
-      add
-      calldataload
+      0x01 add 
+      0x05 shl                                      // [index * 32]
+      [CALLDATA_STATE_POINTER] mload                // [stateCalldataLocation, indexOffset]
+      add                                          // [stateCalldataLocation + indexOffset]
+      dup1 calldataload                             // [stateVar1NumBytes, stateCalldataLocation + indexOffset]
+      add                                         // [stateCalldataLocation + indexOffset + stateVar1NumBytes]
+      calldataload                                // [stateVar]
 
     finish:
 
 }
 
-// TODO: fix this 
 #define macro PREPARE_INPUTS_WITH_MSG_VALUE() = takes (2) returns  (6) {
     // Inputs: [inputs, command]         Output: [calldata]
 
-    // TODO: get free memory pointer
-    0x04 calldatasize sub // [memStart + selector, inputs, command]]
+    // Get function selector
+    dup2 [FUNC_SIG_MASK] and             // [selector, inputs, command]
 
-    // Store 4 byte selector in memory at beginning of call
-    dup3 [FUNC_SIG_MASK] and             // [selector, memStart, inputs, command]
-    dup2 mstore     // [memStart, inputs, command]
-    dup1 0x04 add       // [memEnd, memStart, inputs, command]
-    
+    // Get free memory pointer
+    [MEM_STATE_POINTER] mload                 // [memStart, selector, inputs, command]]
+
+    // Store it 32 bytes after the last state entry
+    swap1 dup2                                // [memStart, selector, memStart, inputs, command]
+    mstore     // [memStart, inputs, command]
+
+    // Increase free memory pointer by 4 bytes and keep it in stack
+    0x04 add       // [memEnd, inputs, command]
+
     // Bitshift inputs to get first input
-    dup3 [INPUT_INDEX_OFFSET] shr     // [input, memEnd, memStart, inputs, command]
+    dup2 [INPUT_INDEX_OFFSET] shr     // [input, memEnd, inputs, command]
     // Store msg.value at memory 0x0
-    0x00 mstore       // [memEnd, memStart, inputs, command]
+    0x00 mstore       // [memEnd, inputs, command]
 
     // Get second input
-    dup3 0x20 shr     // [input, memEnd, memStart, inputs, command]
+    dup2 0x20 shr     // [input, memEnd, inputs, command]
 
     // Push index onto stack
-    0x20              // [index, input, memEnd, memStart, inputs, command]
-    swap2 swap1       // [input, memEnd, index, memStart, inputs, command]
+    0x20              // [index, input, memEnd, inputs, command]
+    swap2 swap1       // [input, memEnd, index, inputs, command]
 }
 
 #define macro PREPARE_INPUTS() = takes (2) returns  (6) {
@@ -254,8 +246,6 @@
 // 0x20 - calldata state pointer
 // 0x40 - return data state free-memory-pointer
 #define macro EXECUTE() = takes (0) returns (0) {
-    SHOW_CALLDATA()
-    
     // Store return data free memory pointer
     0x60 [MEM_STATE_POINTER] mstore                // []
 
@@ -271,7 +261,7 @@
     0x64 add      // [lastCommandLocation]
 
     // Store calldata state pointer for easier retrieval
-    dup1 [CALLDATA_STATE_POINTER] mstore   // [lastCommandLocation]
+    dup1 0x20 add [CALLDATA_STATE_POINTER] mstore   // [lastCommandLocation]
 
     0x64          // [firstIndex, lastCommandLocation]
 
@@ -283,6 +273,7 @@
       dup1 [FUNC_FLAG_MASK] and [FLAG_OFFSET] shr    // [flags, command, index, lastCommandLocation]
       // load calltype from flag
       [FLAG_CT_MASK] and  // [calltype, command, index, lastCommandLocation]
+
       // TODO: MAKE SWITCH TABLE FOR CALLTYPES
       dup1 [FLAG_CT_CALL] eq do_call jumpi // [isCall, calltype, command, index, lastCommandLocation]
       dup1 [FLAG_CT_STATICCALL] eq do_staticcall jumpi // [isStaticCall, calltype, command, index, lastCommandLocation]
@@ -354,10 +345,11 @@
 #define macro MAIN() = takes (0) returns (0) {
     // Identify which function is being called.
     0x00 calldataload 0xE0 shr
-    // dup1 __FUNC_SIG(execute) eq execute jumpi
+    dup1 __FUNC_SIG(execute) eq execute jumpi
     dup1 0xde792d5f eq execute jumpi
 
-    0x00 0x00 revert
+    // TODO: have fallback?
+    // 0x00 0x00 revert
 
     execute:
         EXECUTE()

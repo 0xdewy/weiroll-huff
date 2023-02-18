@@ -54,11 +54,7 @@ contract Planner {
         );
     }
 
-    function callWithValue(
-        address _target,
-        bytes4 _selector,
-        uint8 amountEth
-    ) public {
+    function callWithValue(address _target, bytes4 _selector, uint8 amountEth) public {
         commands.push(
             Command({
                 target: _target,
@@ -83,7 +79,7 @@ contract Planner {
         );
     }
 
-    // Use argument passed as calldata
+    // Use argument directly passed as calldata
     function withRawArg(bytes calldata value, bool isDynamic) public {
         Command storage command = commands[commands.length - 1];
         if (command.inputs.length == 6) {
@@ -118,10 +114,7 @@ contract Planner {
         return bytes1(uint8(state.length - 1));
     }
 
-    function encode()
-        public
-        returns (bytes32[] memory _commands, bytes[] memory _state)
-    {
+    function encode() public returns (bytes32[] memory _commands, bytes[] memory _state) {
         _commands = new bytes32[](commands.length);
         // loop through commands and encode them
         for (uint256 i = 0; i < commands.length; i++) {
@@ -160,4 +153,3 @@ contract Planner {
         delete state;
     }
 }
-

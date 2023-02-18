@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Unlicense
 import "forge-std/console.sol";
+
 pragma solidity ^0.8.15;
 
 contract PlannerHuff {
@@ -134,7 +135,7 @@ contract PlannerHuff {
         internalState.push(new bytes(0));
 
         internalStateIndex = uint8(internalState.length - 1);
-        commandIndex = uint8(commands.length -1);
+        commandIndex = uint8(commands.length - 1);
     }
 
     function encode() public returns (bytes32[] memory _commands, bytes[] memory _state) {
@@ -174,7 +175,7 @@ contract PlannerHuff {
         clear();
     }
 
-    function ensureInputLength(Command storage cmd) internal {
+    function ensureInputLength(Command storage cmd) internal view {
         if (cmd.inputs.length == 6) {
             revert("Planner: Too many arguments");
         }
