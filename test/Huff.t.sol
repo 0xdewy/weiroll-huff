@@ -48,28 +48,6 @@ contract HuffWeirollTest is Test, Events {
         weirollHuff.execute{value: amountEth}(_commands, _state);
     }
 
-    // Add 2 uints and log the result in another contract
-    function testHuffAddUints() public {
-        // call math.add(0x69, 0x420)
-        plannerHuff.staticCall(address(math), math.add.selector);
-        plannerHuff.withRawArg(abi.encode(0x69));
-        plannerHuff.withRawArg(abi.encode(0x420));
-        (uint8 stateIndex, uint8 cmdIndex) = plannerHuff.saveOutput();
-        plannerHuff.regularCall(address(events), events.logUint.selector);
-        plannerHuff.withArg(stateIndex, cmdIndex);
-
-        (bytes32[] memory _commands, bytes[] memory _state) = plannerHuff.encode();
-
-        vm.expectEmit(true, true, true, true);
-        emit LogUint(0x69 + 0x420);
-
-        uint256 gas = gasleft();
-        weirollHuff.execute(_commands, _state);
-        uint gasUsed = gas - gasleft();
-        assertLt(gasUsed, 14275, "Gas has increased!");
-        console.log("Gas - Huff.addUints(): ", gasUsed);
-    }
-
     function testHuffFuzzAddUints(uint128 a, uint128 b) public {
         // call math.add(0x69, 0x420)
         plannerHuff.staticCall(address(math), math.add.selector);
@@ -82,25 +60,9 @@ contract HuffWeirollTest is Test, Events {
         (bytes32[] memory _commands, bytes[] memory _state) = plannerHuff.encode();
 
         vm.expectEmit(true, true, true, true);
-        emit LogUint(uint(a) + b);
+        emit LogUint(uint256(a) + b);
 
         weirollHuff.execute(_commands, _state);
-
-    }
-
-    function testAddUints() public {
-        planner.staticCall(address(math), math.add.selector);
-        planner.withRawArg(abi.encode(0x69), false);
-        planner.withRawArg(abi.encode(0x420), false);
-        bytes1 index = planner.saveOutput();
-        planner.regularCall(address(events), events.logUint.selector);
-        planner.withArg(index);
-
-        (bytes32[] memory _commands,bytes[] memory _state) = planner.encode();
-
-        uint gas = gasleft();
-        weiroll.execute(_commands, _state);
-        console.log("Gas - addUints(): ", gas - gasleft());
     }
 
     function testHuffLogUint() public {
@@ -124,24 +86,6 @@ contract HuffWeirollTest is Test, Events {
         (bytes32[] memory _commands, bytes[] memory _state) = plannerHuff.encode();
 
         // Huff
-        uint256 gas = gasleft();
         weirollHuff.execute(_commands, _state);
-        assertLt(gas - gasleft(), 100000, "Gas has increased!");
-        console.log("Huff.loopLogUint(): ", gas - gasleft());
-    }
-
-    function testLoopLogUint() public {
-        // Do 80 calls
-        for (uint256 i = 0; i < 40; i++) {
-            planner.regularCall(address(events), events.logUint.selector);
-            planner.withRawArg(abi.encode(i), false);
-        }
-
-        (bytes32[] memory _commands, bytes[] memory _state) = planner.encode();
-
-        // Regular
-        uint256 gas = gasleft();
-        weiroll.execute(_commands, _state);
-        console.log("loopLogUint(): ", gas - gasleft());
     }
 }

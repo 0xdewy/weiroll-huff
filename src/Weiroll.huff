@@ -124,6 +124,7 @@
     swap2 swap1       // [input, memEnd, index, inputs, command]
 }
 
+// Store fn selector and setup inputs for encoding
 #define macro PREPARE_INPUTS() = takes (2) returns  (6) {
     // Inputs: [inputs, command]         Output: [calldata]
 
