@@ -2,7 +2,7 @@
 
 // Memory layout
 #define constant MEM_MSG_VALUE = 0x00
-#define constant CALLDATA_STATE_POINTER = 0x24
+#define constant CALLDATA_STATE_POINTER = 0x20
 #define constant MEM_STATE_POINTER = 0x40
 #define constant MEM_STATE_START = 0x60
 
@@ -81,14 +81,26 @@
       finish jump
 
     // TODO: load more efficiently
+    // [numStateVars, [stateVar1Something, stateVar2Something, ...], stateVar1NumBytes, stateVar1]]
+    // numStateVars + 2 + index
     read_calldata:  // [index]
-      0x40 mul
-      [CALLDATA_STATE_POINTER] calldataload // [stateCalldataLocationWithOffset, index]
-      0x04 add                           // [stateCalldataLocation, index]
-      dup1 calldataload                  // [numStateVarsInCalldata, stateCalldataLocation, index]
-      0x40 mul                          // [stateLengthOffset, stateCalldataLocation, index]
-      add                             // [stateCalldataLocation + stateLengthOffset, index]
-      add                            // [stateCalldataLocation + stateLengthOffset + index]
+      // 0x40 mul
+      // [CALLDATA_STATE_POINTER] calldataload // [stateCalldataLocationWithOffset, index]
+      // 0x04 add                           // [stateCalldataLocation, index]
+      // dup1 calldataload                  // [numStateVarsInCalldata, stateCalldataLocation, index]
+      // 0x40 mul                          // [stateLengthOffset, stateCalldataLocation, index]
+      // add                             // [stateCalldataLocation + stateLengthOffset, index]
+      // add                            // [stateCalldataLocation + stateLengthOffset + index]
+      // calldataload
+      // Fetch state from calldata at index on stack
+      DEBUG()
+      [CALLDATA_STATE_POINTER] mload                // [stateCalldataLocation, index]
+      swap1 dup2                                    // [stateCalldataLocation, index, stateCalldataLocation]
+      calldataload                                 // [numStateVars, index, stateCalldataLocation]
+      add                                          // [index + numStateVars, stateCalldataLocation]
+      0x02 add                                   // [index + numStateVars + 2, stateCalldataLocation]
+      0x20 mul                                    // [(index + numStateVars + 2) * 32, stateCalldataLocation]
+      add
       calldataload
 
     finish:
@@ -242,16 +254,9 @@
 // 0x20 - calldata state pointer
 // 0x40 - return data state free-memory-pointer
 #define macro EXECUTE() = takes (0) returns (0) {
+    SHOW_CALLDATA()
     
-    // Get state from calldata
-    // 0x24 calldataload           // [stateCalldataPointer - 4]
-    // 0x04 add                    // [stateCalldataPointer]
-
-    // [CALLDATA_STATE_POINTER] mstore                 // []
-
-
     // Store return data free memory pointer
-    // TODO: update state pointer after staticcall
     0x60 [MEM_STATE_POINTER] mstore                // []
 
 
@@ -261,9 +266,13 @@
 
     // Push first and last index locations of command calldata onto stack
     0x20 mul  // [lastCommandOffset]
+
+
     0x64 add      // [lastCommandLocation]
-    // TODO: remove
-    dup1 calldataload pop
+
+    // Store calldata state pointer for easier retrieval
+    dup1 [CALLDATA_STATE_POINTER] mstore   // [lastCommandLocation]
+
     0x64          // [firstIndex, lastCommandLocation]
 
     // // loop through commands and execute each one
