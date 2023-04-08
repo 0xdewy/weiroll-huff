@@ -1,15 +1,47 @@
-<img align="right" width="150" height="150" top="100" src="./assets/blueprint.png">
+# Weiroll Huff
 
-# huff-project-template • [![ci](https://github.com/huff-language/huff-project-template/actions/workflows/ci.yaml/badge.svg)](https://github.com/huff-language/huff-project-template/actions/workflows/ci.yaml) ![license](https://img.shields.io/github/license/huff-language/huff-project-template.svg) ![solidity](https://img.shields.io/badge/solidity-^0.8.15-lightgrey)
+A modified version Weiroll that seperates state into calldata (provided state) and memory (return data state). This implementation uses very little memory and currently uses about 1/3 the gas compared to the solidity implementation.
 
-Versatile Huff Project Template using Foundry.
+There is a janky solidity planner included for building the weiroll scripts:
 
+```javascript
+    uint a = 1e18;
+    uint b = 5;
+
+    ERC20 erc20 = new ERC20();
+    Math math = new Math();
+    PlannerHuff planner = new PlannerHuff();
+
+    // Plan a new static call to do some maths
+    planner.staticCall(address(math), math.add.selector);
+    // Add raw argument 'a'
+    planner.withRawArg(abi.encode(a));
+    // Add raw argument 'b'
+    planner.withRawArg(abi.encode(b));
+    // Tell planner to save the output of this call to use later
+    (uint8 stateIndex, uint8 cmdIndex) = plannerHuff.saveOutput();
+
+    // Plan a regular call to transfer tokens using math output for value
+    planner.regularCall(address(erc20), erc20.transfer.selector);
+    // to
+    planner.withRawArg(abi.encode(address(0xCAFE)));
+    // value
+    plannerHuff.withArg(stateIndex, cmdIndex);
+
+    // encode weiroll script
+    (bytes32[] memory _commands, bytes[] memory _state) = plannerHuff.encode();
+
+    weiroll.execute(_commands, _state);
+
+```
+
+`Planner.sol` is compatible with regular weiroll. 
+
+`PlannerHuff.sol` seperates memory/calldata state values and is compatible with Weiroll.huff
 
 ## Getting Started
 
 ### Requirements
-
-The following will need to be installed in order to use this template. Please follow the links and instructions.
 
 -   [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)  
     -   You'll know you've done it right if you can run `git --version`
@@ -22,20 +54,15 @@ The following will need to be installed in order to use this template. Please fo
 
 ### Quickstart
 
-1. Clone this repo or use template
+1. Clone this repo
 
-Click "Use this template" on [GitHub](https://github.com/huff-language/huff-project-template) to create a new repository with this repo as the initial state.
-
-Or run:
 
 ```
-git clone https://github.com/huff-language/huff-project-template
-cd huff-project-template
+git clone https://github.com/kyledewy/weiroll-huff/
+cd weiroll-huff
 ```
 
 2. Install dependencies
-
-Once you've cloned and entered into your repository, you need to install the necessary dependencies. In order to do so, simply run:
 
 ```shell
 forge install
@@ -43,28 +70,9 @@ forge install
 
 3. Build & Test
 
-To build and test your contracts, you can run:
-
 ```shell
 forge build
 forge test
-```
-
-For more information on how to use Foundry, check out the [Foundry Github Repository](https://github.com/foundry-rs/foundry/tree/master/forge) and the [foundry-huff library repository](https://github.com/huff-language/foundry-huff).
-
-
-## Blueprint
-
-```ml
-lib
-├─ forge-std — https://github.com/foundry-rs/forge-std
-├─ foundry-huff — https://github.com/huff-language/foundry-huff
-scripts
-├─ Deploy.s.sol — Deployment Script
-src
-├─ SimpleStore — A Simple Storage Contract in Huff
-test
-└─ SimpleStore.t — SimpleStoreTests
 ```
 
 
@@ -74,10 +82,17 @@ test
 
 
 ## Acknowledgements
+- [huff-template](https://github.com/huff-language/huff-project-template)
+- [weiroll](https://github.com/weiroll/weiroll)
+- [awesome-huff](https://github.com/devtooligan/awesome-huff)
 
-- [forge-template](https://github.com/foundry-rs/forge-template)
-- [femplate](https://github.com/abigger87/femplate)
-
+## TODO
+- [x] Static calls
+- [x] Regular calls
+- [x] Calls with value
+- [ ] Dynamic variables
+- [ ] USE_STATE command
+- [ ] Extended commands
 
 ## Disclaimer
 

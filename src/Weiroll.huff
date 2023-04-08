@@ -80,11 +80,11 @@
       mload                               // [stateValue]
       finish jump
 
-    // TODO: find better way to access calldata state
+    // TODO: find more efficient way to access calldata state
     read_calldata:  // Stack: [index]
       // Fetch state from calldata at index on stack
-      0x01 add 
-      0x05 shl                                      // [index * 32]
+      0x01 add                                       // [++index]
+      0x05 shl                                      // [++index * 32]
       [CALLDATA_STATE_POINTER] mload                // [stateCalldataLocation, indexOffset]
       add                                          // [stateCalldataLocation + indexOffset]
       dup1 calldataload                             // [stateVar1NumBytes, stateCalldataLocation + indexOffset]
@@ -224,41 +224,22 @@
 
 }
 
-#define macro DEBUG() = takes (0) returns (0) {
-    pc pc pc pc pop pop pop pop
-}
-
-#define macro SHOW_CALLDATA() = takes (0) returns (0) {
-    0x500 0x04 0x0 calldatacopy
-}
-
-// Calldata layout:
-// bytes32[] calldata commands, bytes[] calldata state)
-// 0x04 - commands pointer 
-// 0x24 - state pointer
-// 0x44 - number of commands
-// 0x64..n - commands
-// 0x84 - number of state entries
-// 0xA4 - number of bytes entry 0
-// 0xC4 - number of bytes entry 1
-// 0xE4 - state value 0
 // Memory Layout
 // 0x00 - msg.value
 // 0x20 - calldata state pointer
-// 0x40 - return data state free-memory-pointer
+// 0x40 - state memory pointer
+// 0x60 - state memory data start
 #define macro EXECUTE() = takes (0) returns (0) {
     // Store return data free memory pointer
     0x60 [MEM_STATE_POINTER] mstore                // []
 
 
-    // Get the number of commands provided
+    // Get the number of commands provided, finish if 0
     0x44 calldataload   // [numCommands]
     dup1 iszero finish_execution jumpi
 
     // Push first and last index locations of command calldata onto stack
     0x20 mul  // [lastCommandOffset]
-
-
     0x64 add      // [lastCommandLocation]
 
     // Store calldata state pointer for easier retrieval
