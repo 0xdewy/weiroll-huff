@@ -52,7 +52,6 @@
 #define constant END_OF_ARGS = 0xFF // 0b11111111
 #define constant USE_STATE = 0xFE // 0b11111110
 
-// TODO: Is this worth it?
 // subs 8 from the top of the stack
 #define macro SUB_8() = takes (0) returns (0) {
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8 add
@@ -83,10 +82,13 @@
     // TODO: find more efficient way to access calldata state
     read_calldata:  // Stack: [index]
       // Fetch state from calldata at index on stack
-      0x01 add                                       // [++index]
+      // 0x01 add                                       // [++index]
       0x05 shl                                      // [++index * 32]
+      // Load beginning of calldata state
       [CALLDATA_STATE_POINTER] mload                // [stateCalldataLocation, indexOffset]
+      // Add index offset to state location
       add                                          // [stateCalldataLocation + indexOffset]
+      // Read number of bytes of state variable
       dup1 calldataload                             // [stateVar1NumBytes, stateCalldataLocation + indexOffset]
       add                                         // [stateCalldataLocation + indexOffset + stateVar1NumBytes]
       calldataload                                // [stateVar]
@@ -95,24 +97,31 @@
 
 }
 
-#define macro PREPARE_INPUTS_WITH_MSG_VALUE() = takes (2) returns  (6) {
+#define macro STORE_SELECTOR() = takes (2) returns (3) {
     // Inputs: [inputs, command]         Output: [calldata]
 
-    // Get function selector
-    dup2 [FUNC_SIG_MASK] and             // [selector, inputs, command]
+    // Get free memory location
+    [MEM_STATE_POINTER] mload                 // [memStart, inputs, command]
 
-    // Get free memory pointer
-    [MEM_STATE_POINTER] mload                 // [memStart, selector, inputs, command]]
+    // Mask command to get function selector
+    dup3 [FUNC_SIG_MASK] and             // [selector, memStart, inputs, command]
 
-    // Store it 32 bytes after the last state entry
-    swap1 dup2                                // [memStart, selector, memStart, inputs, command]
-    mstore     // [memStart, inputs, command]
+    dup2 mstore                           // [memStart, inputs, command]
 
     // Increase free memory pointer by 4 bytes and keep it in stack
     0x04 add       // [memEnd, inputs, command]
 
+}
+
+#define macro PREPARE_INPUTS_WITH_MSG_VALUE() = takes (2) returns  (6) {
+    // Inputs: [inputs, command]         Output: [calldata]
+
+    // Store the function selector at free memory
+    STORE_SELECTOR() // [memEnd, inputs, command]
+
     // Bitshift inputs to get first input
     dup2 [INPUT_INDEX_OFFSET] shr     // [input, memEnd, inputs, command]
+
     // Store msg.value at memory 0x0
     0x00 mstore       // [memEnd, inputs, command]
 
@@ -120,7 +129,7 @@
     dup2 0x20 shr     // [input, memEnd, inputs, command]
 
     // Push index onto stack
-    0x20              // [index, input, memEnd, inputs, command]
+    [INPUT_INDEX_OFFSET]              // [index, input, memEnd, inputs, command]
     swap2 swap1       // [input, memEnd, index, inputs, command]
 }
 
@@ -128,18 +137,7 @@
 #define macro PREPARE_INPUTS() = takes (2) returns  (6) {
     // Inputs: [inputs, command]         Output: [calldata]
 
-    // Get function selector
-    dup2 [FUNC_SIG_MASK] and             // [selector, inputs, command]
-
-    // Get free memory pointer
-    [MEM_STATE_POINTER] mload                 // [memStart, selector, inputs, command]]
-
-    // Store it 32 bytes after the last state entry
-    swap1 dup2                                // [memStart, selector, memStart, inputs, command]
-    mstore     // [memStart, inputs, command]
-
-    // Increase free memory pointer by 4 bytes and keep it in stack
-    0x04 add       // [memEnd, inputs, command]
+    STORE_SELECTOR() // [memEnd, inputs, command]
     
     // Get first input
     dup2 [INPUT_INDEX_OFFSET] shr     // [input, memEnd, inputs, command]
@@ -194,6 +192,7 @@
 
     // Check if output is needed
     dup1 0xFF eq no_output jumpi // [outputs, memSize, inputs, command]
+
     // TODO: check for dynamic output length
     // TODO: USE_STATE not implemented
 
@@ -203,10 +202,8 @@
     swap2                       // [memSize, outputLocation, outputSize, inputs, command]
 
     // return size 
-    // TODO: is mload needed here?
     [MEM_STATE_POINTER] mload                        // [memStart, memSize, outputLocation, outputSize, inputs, command]
 
-    // TODO: when should this be updated?
     // Update state free memory pointer (output will take up current spot)
     dup1 0x20 add [MEM_STATE_POINTER] mstore                  // [memStart, memSize, outputLocation, outputSize, inputs, command]
 
@@ -233,17 +230,15 @@
     // Store return data free memory pointer
     0x60 [MEM_STATE_POINTER] mstore                // []
 
-
     // Get the number of commands provided, finish if 0
     0x44 calldataload   // [numCommands]
-    dup1 iszero finish_execution jumpi
 
     // Push first and last index locations of command calldata onto stack
     0x20 mul  // [lastCommandOffset]
     0x64 add      // [lastCommandLocation]
 
-    // Store calldata state pointer for easier retrieval
-    dup1 0x20 add [CALLDATA_STATE_POINTER] mstore   // [lastCommandLocation]
+    // Store calldata state pointer to the first element in bytes[] calldata array
+    dup1 0x40 add [CALLDATA_STATE_POINTER] mstore   // [lastCommandLocation]
 
     0x64          // [firstIndex, lastCommandLocation]
 
@@ -256,11 +251,11 @@
       // load calltype from flag
       [FLAG_CT_MASK] and  // [calltype, command, index, lastCommandLocation]
 
-      // TODO: MAKE SWITCH TABLE FOR CALLTYPES
       dup1 [FLAG_CT_CALL] eq do_call jumpi // [isCall, calltype, command, index, lastCommandLocation]
       dup1 [FLAG_CT_STATICCALL] eq do_staticcall jumpi // [isStaticCall, calltype, command, index, lastCommandLocation]
       dup1 [FLAG_CT_VALUECALL] eq do_value_call jumpi // [isStaticCall, calltype, command, index, lastCommandLocation]
-      finish_execution jump
+      // TODO: InvalidCalltype error
+      revert_execution jump
 
     do_value_call: 
       pop          // [command, index, numCommands]

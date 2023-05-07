@@ -4,13 +4,14 @@ pragma solidity ^0.8.15;
 import "foundry-huff/HuffDeployer.sol";
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-import "../src/Planner.sol";
 import "../src/PlannerHuff.sol";
-import "../src/Weiroll.sol";
-import "../src/CommandBuilder.sol";
-import "../src/test/Events.sol";
-import "../src/test/Math.sol";
-import "../src/test/Payable.sol";
+import "../src/weiroll/Planner.sol";
+import "../src/weiroll/Weiroll.sol";
+import "../src/weiroll/CommandBuilder.sol";
+import "./helpers/Events.sol";
+import "./helpers/Math.sol";
+import "./helpers/Payable.sol";
+import "./helpers/Sender.sol";
 
 interface IWeiroll {
     function execute(bytes32[] calldata _commands, bytes[] memory _state) external payable;
@@ -25,6 +26,7 @@ contract HuffWeirollTest is Test, Events {
     Events events;
     Math math;
     Payable payableContract;
+    Sender sender;
 
     /// @dev Setup the testing environment.
     function setUp() public {
@@ -35,6 +37,7 @@ contract HuffWeirollTest is Test, Events {
         events = new Events();
         math = new Math();
         payableContract = new Payable();
+        sender = new Sender();
     }
 
     function testHuffSendEther() public {
@@ -76,16 +79,18 @@ contract HuffWeirollTest is Test, Events {
         weirollHuff.execute(_commands, _state);
     }
 
-    function testHuffLoopLogUint() public {
-        // Do 80 calls
-        for (uint256 i = 0; i < 40; i++) {
-            plannerHuff.regularCall(address(events), events.logUint.selector);
-            plannerHuff.withRawArg(abi.encode(i));
-        }
+    function testHuffSender() public {
+        address expectedSender = address(weirollHuff);
+        plannerHuff.staticCall(address(sender), sender.sender.selector);
+        (uint8 stateIndex, uint8 cmdIndex) = plannerHuff.saveOutput();
+
+        plannerHuff.regularCall(address(events), events.logAddress.selector);
+        plannerHuff.withArg(stateIndex, cmdIndex);
+
+        vm.expectEmit(true, true, true, true);
+        emit LogAddress(expectedSender);
 
         (bytes32[] memory _commands, bytes[] memory _state) = plannerHuff.encode();
-
-        // Huff
         weirollHuff.execute(_commands, _state);
     }
 }

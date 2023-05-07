@@ -92,10 +92,10 @@ contract PlannerHuff {
 
         // If it's dynamic add variable length flag
         if (value.length > 32) {
+            // uint8 index = uint8(INPUT_VARIABLE_LENGTH & state.length);
+            // command.inputs.push(uint8(index));
             // TODO: can be fixed length arrays
-            console.log("Dynamic argument");
-            uint8 index = uint8(INPUT_VARIABLE_LENGTH & state.length);
-            command.inputs.push(uint8(index));
+            revert("Dynamic arguments not supported");
         } else {
             command.inputs.push(uint8(state.length));
         }
@@ -113,13 +113,10 @@ contract PlannerHuff {
         }
 
         uint8 index = uint8(INPUT_USE_RETURN_VAR | internalStateIndex);
-        console.log("index: ", index);
 
         // Variable length
         if (commands[commandIndex].out & INPUT_VARIABLE_LENGTH > 0) {
-            console.log("Variable length call!");
             index = uint8(INPUT_VARIABLE_LENGTH);
-            console.log("index: ", index);
         }
 
         command.inputs.push(index);
