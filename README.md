@@ -1,6 +1,6 @@
 # Weiroll Huff
 
-A modified version Weiroll that seperates state into calldata (provided state) and memory (return data state). This implementation uses very little memory and currently uses about 1/3 the gas compared to the solidity implementation.
+A modified version Weiroll that separates state into calldata (provided state) and memory (return data state). This implementation uses very little memory and currently uses about 1/3 the gas compared to the solidity implementation.
 
 There is a janky solidity planner included for building the weiroll scripts:
 
